@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Personal Finance Manager</title>
+    <meta
+      name="description"
+      content="Personal Finance Manager - FastAPI backend with accounts, budgets, goals, recurring rules, analytics and rule-based insights."
+    />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <!-- ---------------------------------------------------------------- -->
+    <!-- Auth screen                                                       -->
+    <!-- ---------------------------------------------------------------- -->
+    <main id="auth-screen" class="auth-screen">
+      <section class="auth-card" aria-labelledby="auth-title">
+        <div class="auth-brand">
+          <span class="logo" aria-hidden="true">◈</span>
+          <div>
+            <h1 id="auth-title">Personal Finance Manager</h1>
+            <p class="muted">
+              Accounts · Budgets · Goals · Recurring rules · Analytics · Insights
+            </p>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist">
+          <button class="tab is-active" role="tab" data-auth-tab="login">Log in</button>
+          <button class="tab" role="tab" data-auth-tab="register">Create account</button>
+        </div>
+
+        <form id="login-form" class="auth-form" autocomplete="on">
+          <label>
+            Email
+            <input id="login-email" type="email" name="email" value="demo@pfm.app" required />
+          </label>
+          <label>
+            Password
+            <input
+              id="login-password"
+              type="password"
+              name="password"
+              value="demo1234"
+              minlength="8"
+              required
+            />
+          </label>
+          <button class="btn btn-primary" type="submit">Log in</button>
+          <button class="btn btn-ghost" type="button" id="demo-btn">
+            Use the seeded demo account
+          </button>
+        </form>
+
+        <form id="register-form" class="auth-form is-hidden" autocomplete="on">
+          <label>
+            Full name
+            <input id="register-name" type="text" name="full_name" maxlength="120" />
+          </label>
+          <label>
+            Email
+            <input id="register-email" type="email" name="email" required />
+          </label>
+          <label>
+            Password <span class="muted">(min 8 characters)</span>
+            <input id="register-password" type="password" minlength="8" required />
+          </label>
+          <button class="btn btn-primary" type="submit">Create account</button>
+          <p class="muted small">
+            New accounts start with 12 starter categories so the app is usable immediately.
+          </p>
+        </form>
+
+        <p id="auth-error" class="alert alert-danger is-hidden" role="alert"></p>
+
+        <footer class="auth-footer muted small">
+          <a href="/docs" target="_blank" rel="noreferrer">API docs</a> ·
+          <a href="/redoc" target="_blank" rel="noreferrer">ReDoc</a> ·
+          <a href="/openapi.json" target="_blank" rel="noreferrer">OpenAPI</a> ·
+          <button class="linklike" id="theme-toggle" type="button">Toggle theme</button>
+        </footer>
+      </section>
+    </main>
+
+    <!-- ---------------------------------------------------------------- -->
+    <!-- App shell                                                          -->
+    <!-- ---------------------------------------------------------------- -->
+    <div id="app-screen" class="app-screen is-hidden">
+      <header class="topbar">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">◈</span>
+          <strong>PFM</strong>
+        </div>
+
+        <nav class="nav" aria-label="Sections">
+          <button class="nav-btn is-active" data-tab="overview">Overview</button>
+          <button class="nav-btn" data-tab="transactions">Transactions</button>
+          <button class="nav-btn" data-tab="budgets">Budgets</button>
+          <button class="nav-btn" data-tab="goals">Goals</button>
+          <button class="nav-btn" data-tab="recurring">Recurring</button>
+          <button class="nav-btn" data-tab="data">Import / Export</button>
+        </nav>
+
+        <div class="topbar-right">
+          <span id="user-chip" class="chip"></span>
+          <button class="btn btn-ghost btn-sm" id="refresh-btn" title="Reload data">↻</button>
+          <button class="btn btn-ghost btn-sm" id="logout-btn">Log out</button>
+        </div>
+      </header>
+
+      <p id="toast" class="toast is-hidden" role="status"></p>
+
+      <main class="content">
+        <!-- OVERVIEW -------------------------------------------------- -->
+        <section data-panel="overview" class="panel">
+          <div class="kpis" id="kpis"></div>
+
+          <div class="grid grid-2">
+            <article class="card">
+              <header class="card-head">
+                <h2>Income vs expense</h2>
+                <span class="muted small">last 6 months</span>
+              </header>
+              <div id="chart-cashflow" class="chart"></div>
+            </article>
+
+            <article class="card">
+              <header class="card-head">
+                <h2>Where the money went</h2>
+                <span class="muted small" id="category-window"></span>
+              </header>
+              <div id="chart-categories" class="chart"></div>
+            </article>
+          </div>
+
+          <div class="grid grid-2">
+            <article class="card">
+              <header class="card-head">
+                <h2>Insights</h2>
+                <span class="muted small">rule engine · deterministic</span>
+              </header>
+              <ul id="insights" class="insights"></ul>
+            </article>
+
+            <article class="card">
+              <header class="card-head">
+                <h2>Budget health</h2>
+                <span class="muted small" id="budget-window"></span>
+              </header>
+              <div id="budget-mini"></div>
+            </article>
+          </div>
+
+          <article class="card">
+            <header class="card-head">
+              <h2>Recent activity</h2>
+              <span class="muted small">newest first</span>
+            </header>
+            <div class="table-wrap">
+              <table class="table" id="recent-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Account</th>
+                    <th class="num">Amount</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- TRANSACTIONS ---------------------------------------------- -->
+        <section data-panel="transactions" class="panel is-hidden">
+          <article class="card">
+            <header class="card-head">
+              <h2>Transactions</h2>
+              <div class="card-actions">
+                <button class="btn btn-primary btn-sm" id="new-txn-btn">+ Add transaction</button>
+              </div>
+            </header>
+
+            <div class="filters">
+              <input id="f-search" type="search" placeholder="Search description, merchant, tags" />
+              <select id="f-type">
+                <option value="">All types</option>
+                <option value="expense">Expense</option>
+                <option value="income">Income</option>
+                <option value="transfer">Transfer</option>
+              </select>
+              <select id="f-category"><option value="">All categories</option></select>
+              <input id="f-from" type="date" aria-label="From date" />
+              <input id="f-to" type="date" aria-label="To date" />
+              <select id="f-sort">
+                <option value="occurred_on:desc">Newest first</option>
+                <option value="occurred_on:asc">Oldest first</option>
+                <option value="amount:desc">Largest first</option>
+                <option value="amount:asc">Smallest first</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" id="f-reset">Reset</button>
+            </div>
+
+            <div class="table-wrap">
+              <table class="table" id="txn-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Account</th>
+                    <th>Tags</th>
+                    <th class="num">Amount</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <footer class="pager">
+              <button class="btn btn-ghost btn-sm" id="page-prev">← Prev</button>
+              <span id="page-info" class="muted small"></span>
+              <button class="btn btn-ghost btn-sm" id="page-next">Next →</button>
+            </footer>
+          </article>
+        </section>
+
+        <!-- BUDGETS ---------------------------------------------------- -->
+        <section data-panel="budgets" class="panel is-hidden">
+          <article class="card">
+            <header class="card-head">
+              <h2>Envelope budgets</h2>
+              <div class="card-actions">
+                <button class="btn btn-primary btn-sm" id="new-budget-btn">+ New budget</button>
+              </div>
+            </header>
+            <p class="muted small">
+              Spend is computed live for the current window; <em>projected</em> extrapolates the
+              current burn rate to period end.
+            </p>
+            <div id="budget-list" class="stack"></div>
+          </article>
+        </section>
+
+        <!-- GOALS ------------------------------------------------------ -->
+        <section data-panel="goals" class="panel is-hidden">
+          <article class="card">
+            <header class="card-head">
+              <h2>Savings goals</h2>
+              <div class="card-actions">
+                <button class="btn btn-primary btn-sm" id="new-goal-btn">+ New goal</button>
+              </div>
+            </header>
+            <div id="goal-list" class="grid grid-3"></div>
+          </article>
+        </section>
+
+        <!-- RECURRING -------------------------------------------------- -->
+        <section data-panel="recurring" class="panel is-hidden">
+          <article class="card">
+            <header class="card-head">
+              <h2>Recurring rules</h2>
+              <div class="card-actions">
+                <button class="btn btn-ghost btn-sm" id="run-recurring-btn">
+                  Run due transactions
+                </button>
+                <button class="btn btn-primary btn-sm" id="new-rule-btn">+ New rule</button>
+              </div>
+            </header>
+            <p class="muted small">
+              Posting is idempotent and safe to call from cron
+              (<code>python -m app.scripts.run_recurring</code>).
+            </p>
+            <div class="table-wrap">
+              <table class="table" id="rule-table">
+                <thead>
+                  <tr>
+                    <th>Next run</th>
+                    <th>Description</th>
+                    <th>Frequency</th>
+                    <th>Type</th>
+                    <th class="num">Amount</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- DATA ------------------------------------------------------- -->
+        <section data-panel="data" class="panel is-hidden">
+          <div class="grid grid-2">
+            <article class="card">
+              <header class="card-head"><h2>Import a bank CSV</h2></header>
+              <p class="muted small">
+                Accepts <code>date, description, amount</code> plus the usual bank aliases
+                (<code>narration</code>, <code>withdrawal</code>, <code>deposit</code>,
+                <code>value date</code>). Unknown categories are created, unknown accounts reuse
+                your first account.
+              </p>
+              <form id="import-form" class="stack">
+                <input type="file" id="import-file" accept=".csv,text/csv" required />
+                <label class="checkbox">
+                  <input type="checkbox" id="import-dry" /> Dry run (validate only)
+                </label>
+                <button class="btn btn-primary" type="submit">Upload</button>
+              </form>
+              <pre id="import-result" class="code is-hidden"></pre>
+              <a class="btn btn-ghost btn-sm" href="/api/v1/data/import/template" download>
+                Download CSV template
+              </a>
+            </article>
+
+            <article class="card">
+              <header class="card-head"><h2>Export</h2></header>
+              <p class="muted small">
+                Round-trips with the importer: export, edit in a spreadsheet, re-upload.
+              </p>
+              <div class="stack">
+                <a class="btn btn-primary btn-sm" id="export-link" href="#" download
+                  >Download transactions.csv</a
+                >
+                <button class="btn btn-ghost btn-sm" id="seed-btn">
+                  Load 6 months of sample data
+                </button>
+                <p class="muted small">
+                  Sample data is generated locally (deterministic seed) through the public API -
+                  the same endpoints your own client would use.
+                </p>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ---------------------------------------------------------------- -->
+    <!-- Modal (transaction / budget / goal / rule forms)                    -->
+    <!-- ---------------------------------------------------------------- -->
+    <dialog id="modal" class="modal">
+      <form method="dialog" id="modal-form">
+        <header class="modal-head">
+          <h2 id="modal-title">New</h2>
+          <button class="btn btn-ghost btn-sm" value="cancel" aria-label="Close">✕</button>
+        </header>
+        <div id="modal-body" class="stack"></div>
+        <p id="modal-error" class="alert alert-danger is-hidden"></p>
+        <footer class="modal-foot">
+          <button class="btn btn-ghost" value="cancel">Cancel</button>
+          <button class="btn btn-primary" id="modal-submit" value="save">Save</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

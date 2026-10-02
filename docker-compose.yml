@@ -1,0 +1,65 @@
+# Two ways to run:
+#   docker compose up                                  -> API + dashboard on SQLite (zero config)
+#   docker compose --profile postgres up               -> API on PostgreSQL + migrations
+#
+# The dashboard is at http://localhost:8000/app , docs at /docs .
+
+services:
+  api:
+    build: .
+    image: personal-finance-manager:latest
+    ports:
+      - "8000:8000"
+    environment:
+      PFM_ENVIRONMENT: development
+      PFM_SECRET_KEY: ${PFM_SECRET_KEY:-docker-compose-dev-secret-change-me-0123456789}
+      PFM_DATABASE_URL: ${PFM_DATABASE_URL:-sqlite:////app/data/pfm.db}
+      PFM_SEED_DEMO_USER: ${PFM_SEED_DEMO_USER:-true}
+      PFM_DEBUG: "false"
+      WEB_CONCURRENCY: "2"
+    volumes:
+      - pfm-data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=3).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Optional PostgreSQL profile: `docker compose --profile postgres up`
+  db:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: pfm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pfm}
+      POSTGRES_DB: pfm
+    volumes:
+      - pfm-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pfm -d pfm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Runs once: applies migrations, then exits. `api` waits for it to finish.
+  migrate:
+    build: .
+    image: personal-finance-manager:latest
+    profiles: ["postgres"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PFM_DATABASE_URL: postgresql+psycopg://pfm:${POSTGRES_PASSWORD:-pfm}@db:5432/pfm
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+volumes:
+  pfm-data:
+  pfm-pgdata:

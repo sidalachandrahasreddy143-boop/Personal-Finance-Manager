@@ -137,3 +137,41 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# ---------------------------------------------------------------------------
+# Python / backend additions
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache
+
+# Local databases and environment
+*.db
+*.sqlite3
+.env
+.env.local
+.env.*.local
+!env.example
+
+# Generated screenshots (capture them locally with scripts/screenshot.py)
+docs/screenshots/*.png
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
