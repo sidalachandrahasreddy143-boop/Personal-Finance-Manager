@@ -1,0 +1,2 @@
+Screenshots are generated locally with:  python scripts/screenshot.py
+They are intentionally not committed from automated environments.

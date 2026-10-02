@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PFM_SECRET_KEY: ci-secret-key-0123456789-0123456789-0123456789
+  PFM_ENVIRONMENT: test
+
+jobs:
+  lint:
+    name: Lint & format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Ruff (lint)
+        run: ruff check app tests --output-format=github
+      - name: Ruff (format check)
+        run: ruff format --check app tests
+
+  typecheck:
+    name: Type check (mypy strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: mypy app
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Pytest with coverage gate
+        run: pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=85
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  migrations:
+    name: Migrations apply cleanly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Upgrade, check for drift, then downgrade
+        env:
+          PFM_DATABASE_URL: sqlite:///./migration-check.db
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
+
+  docker:
+    name: Docker image builds & serves traffic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: pfm:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run container and smoke-test the API
+        run: |
+          docker run -d --name pfm -p 8000:8000 \
+            -e PFM_SECRET_KEY=ci-secret-key-0123456789 \
+            -e PFM_SEED_DEMO_USER=true \
+            -e PFM_DATABASE_URL=sqlite:////app/data/pfm.db \
+            pfm:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/api/v1/health/live > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/api/v1/health | tee /dev/stderr | grep -q '"status":"ok"'
+          curl -fsS -X POST http://localhost:8000/api/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"demo@pfm.app","password":"demo1234"}' | grep -q access_token
+          docker logs pfm | tail -20
+
+  security:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - run: pip-audit --requirement requirements.txt --strict
